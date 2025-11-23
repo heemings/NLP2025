@@ -187,7 +187,7 @@
         const title = recommendInput.value.trim();
         if (!title) return;
 
-        const res = await fetch(`http://127.0.0.1:8000/movie/recommend?title=${encodeURIComponent(title)}`);
+        const res = await fetch(`http://127.0.0.1:8000/movie_recommend?title=${encodeURIComponent(title)}`);
         const data = await res.json();
 
         recommendTable.innerHTML = "";
