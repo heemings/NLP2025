@@ -168,5 +168,49 @@
     loadPlay();
   </script>
 
+  <h2>🔍 희곡 추천</h2>
+  <input id="recommend-input" type="text" placeholder="희곡 제목 입력 후 Enter" />
+  <table>
+    <thead>
+      <tr>
+        <th>순위</th>
+        <th>추천 희곡 제목</th>
+        <th>유사도</th>
+      </tr>
+    </thead>
+    <tbody id="recommend-table"></tbody>
+  </table>
+
+  <script>
+    const recommendInput = document.getElementById("recommend-input");
+    const recommendTable = document.getElementById("recommend-table");
+
+    recommendInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        const title = recommendInput.value.trim();
+        if (!title) return;
+
+        const res = await fetch(`http://127.0.0.1:8000/play/recommend?title=${encodeURIComponent(title)}`);
+        const data = await res.json();
+
+        recommendTable.innerHTML = "";
+        if (data.error) {
+          recommendTable.innerHTML = `<tr><td colspan="3">${data.error}</td></tr>`;
+          return;
+        }
+
+        data.forEach((d, idx) => {
+          recommendTable.innerHTML += `
+            <tr>
+              <td>${idx + 1}</td>
+              <td>${d.title}</td>
+              <td>${d.similarity.toFixed(3)}</td>
+            </tr>
+          `;
+        });
+      }
+    });
+  </script>
+
 </body>
 </html>
