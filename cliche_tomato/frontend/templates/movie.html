@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>클리셰토마토 🍅 – 영화</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 30px;
+      background: #fafafa;
+    }
+    h1 {
+      color: #d32f2f;
+    }
+    #search {
+      width: 300px;
+      padding: 10px;
+      margin-top: 20px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 15px;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+    }
+    th {
+      background: #f5f5f5;
+      font-weight: bold;
+    }
+    tr:hover {
+      background: #fff3f3;
+    }
+
+    /* 페이지네이션 스타일 */
+    .pagination {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .pagination button {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: none;
+      background: #d32f2f;
+      color: white;
+      cursor: pointer;
+    }
+    .pagination button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+    .pagination span {
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🍅 클리셰토마토 – 영화 클리셰 점수</h1>
+
+  <!-- 검색창 -->
+  <input id="search" type="text" placeholder="제목 또는 키워드 검색..." />
+
+  <table>
+    <thead>
+      <tr>
+        <th>순위</th>
+        <th>제목</th>
+        <th>키워드</th>
+        <th>클리셰 점수</th>
+      </tr>
+    </thead>
+    <tbody id="movie-table"></tbody>
+  </table>
+
+  <!-- 페이지네이션 -->
+  <div class="pagination">
+    <button id="prev">이전</button>
+    <span id="page-info">1 / 1</span>
+    <button id="next">다음</button>
+  </div>
+
+  <script>
+    let movieData = [];
+    let filteredData = [];
+    let currentPage = 1;
+    const pageSize = 10;
+
+    async function loadMovie() {
+      const res = await fetch("http://127.0.0.1:8000/movie");
+      movieData = await res.json();
+      filteredData = movieData;
+      renderTable();
+      updatePagination();
+    }
+
+    function getPagedData() {
+      const start = (currentPage - 1) * pageSize;
+      return filteredData.slice(start, start + pageSize);
+    }
+
+    function renderTable() {
+      const table = document.getElementById("movie-table");
+      table.innerHTML = "";
+
+      const pageData = getPagedData();
+
+      pageData.forEach((m, idx) => {
+        table.innerHTML += `
+          <tr>
+            <td>${(currentPage - 1) * pageSize + idx + 1}</td>
+            <td>${m.title}</td>
+            <td>${m.keywords}</td>
+            <td>${m.cliche_score}</td>
+          </tr>
+        `;
+      });
+    }
+
+    function updatePagination() {
+      const totalPages = Math.ceil(filteredData.length / pageSize);
+      document.getElementById("page-info").innerText = `${currentPage} / ${totalPages}`;
+
+      document.getElementById("prev").disabled = currentPage === 1;
+      document.getElementById("next").disabled = currentPage === totalPages || totalPages === 0;
+    }
+
+    document.getElementById("search").addEventListener("input", (e) => {
+      const q = e.target.value.toLowerCase();
+
+      filteredData = movieData.filter(m =>
+        m.title.toLowerCase().includes(q) ||
+        m.keywords.toLowerCase().includes(q)
+      );
+
+      currentPage = 1;
+      renderTable();
+      updatePagination();
+    });
+
+    document.getElementById("prev").addEventListener("click", () => {
+      currentPage--;
+      renderTable();
+      updatePagination();
+    });
+
+    document.getElementById("next").addEventListener("click", () => {
+      currentPage++;
+      renderTable();
+      updatePagination();
+    });
+
+    loadMovie();
+  </script>
+
+</body>
+</html>
