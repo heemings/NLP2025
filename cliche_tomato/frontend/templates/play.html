@@ -75,13 +75,20 @@
       background: #aaa;
       cursor: not-allowed;
     }
+
+    /* [추가된 스타일] 대본 분석기 전용 */
+    .analysis-section { margin-top: 60px; padding-top: 20px; border-top: 2px dashed #ddd; }
+    #scriptInput { width: 100%; height: 150px; padding: 10px; margin-top: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+    #analyzeBtn { width: 100%; padding: 15px; background: #d32f2f; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-top: 10px; }
+    #analyzeBtn:disabled { background: #aaa; }
+    #analysis-result { display: none; margin-top: 20px; padding: 20px; background: #fff0f0; border: 1px solid #ffcdd2; border-radius: 5px; }
+    .tag { display: inline-block; background: #ffcdd2; color: #b71c1c; padding: 5px 10px; margin: 3px; border-radius: 15px; font-size: 14px; }
   </style>
 </head>
 <body>
 
   <h1>🍅 클리셰토마토 – 희곡 클리셰 점수</h1>
 
-  <!-- 검색 타입 + 정렬 버튼 -->
   <div id="controls">
     <div>
       <label><input type="radio" name="search_type" value="title" checked> 제목 검색</label>
@@ -96,7 +103,6 @@
     </div>
   </div>
 
-  <!-- 검색창 -->
   <input id="search" type="text" placeholder="검색어 입력..." />
 
   <table>
@@ -111,7 +117,6 @@
     <tbody id="play-table"></tbody>
   </table>
 
-  <!-- 페이지네이션 -->
   <div class="pagination">
     <button id="prev">이전</button>
     <span id="page-info">1 / 1</span>
@@ -209,10 +214,6 @@
 
 
 
-  <!-- ======================== -->
-  <!-- 희곡 추천 기능 -->
-  <!-- ======================== -->
-
   <h2>🔍 희곡 추천</h2>
   <input id="recommend-input" type="text" placeholder="희곡 제목 입력 후 Enter" />
 
@@ -260,6 +261,58 @@
         `;
       });
     });
+  </script>
+
+
+  <div class="analysis-section">
+      <h2>📝 내 대본 분석하기</h2>
+      <textarea id="scriptInput" placeholder="분석할 대본 내용을 여기에 붙여넣으세요..."></textarea>
+      <button id="analyzeBtn" onclick="analyzeScript()">클리셰 점수 분석</button>
+      
+      <div id="analysis-result">
+        <h3 style="color:#d32f2f;">🍅 점수: <span id="scoreValue">0</span>점</h3>
+        <div id="keywordList"></div>
+      </div>
+  </div>
+
+  <script>
+    async function analyzeScript() {
+        const text = document.getElementById('scriptInput').value;
+        const btn = document.getElementById('analyzeBtn');
+        const resultDiv = document.getElementById('analysis-result');
+        
+        if (!text.trim()) { alert("대본 내용을 입력해주세요!"); return; }
+
+        btn.innerText = "분석 중...";
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/api/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
+            });
+            const data = await response.json();
+
+            if (data.error) {
+                alert(data.error);
+            } else {
+                document.getElementById('scoreValue').innerText = data.cliche_score;
+                const kwDiv = document.getElementById('keywordList');
+                kwDiv.innerHTML = '<strong>키워드: </strong>';
+                data.keywords.forEach(kw => {
+                    kwDiv.innerHTML += `<span class="tag">#${kw}</span>`;
+                });
+                resultDiv.style.display = 'block';
+            }
+        } catch (error) {
+            console.error(error);
+            alert("오류 발생");
+        } finally {
+            btn.innerText = "클리셰 점수 분석";
+            btn.disabled = false;
+        }
+    }
   </script>
 
 </body>
