@@ -9,10 +9,9 @@
       padding: 30px;
       background: #fafafa;
     }
-    h1 {
-      color: #d32f2f;
-    }
-    #search {
+    h1 { color: #d32f2f; }
+
+    #search, #recommend-input {
       width: 300px;
       padding: 10px;
       margin-top: 20px;
@@ -20,6 +19,7 @@
       border: 1px solid #ccc;
       font-size: 16px;
     }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -28,18 +28,31 @@
       border-radius: 10px;
       overflow: hidden;
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
+    } 
     th, td {
       padding: 15px;
       border-bottom: 1px solid #eee;
       text-align: left;
     }
-    th {
-      background: #f5f5f5;
-      font-weight: bold;
+    th { background: #f5f5f5; font-weight: bold; }
+    tr:hover { background: #fff3f3; }
+
+    /* 정렬 + 검색 타입 컨트롤러 */
+    #controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 15px;
     }
-    tr:hover {
-      background: #fff3f3;
+
+    #sort-buttons button {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      margin-left: 5px;
+      background: #d32f2f;
+      color: white;
+      cursor: pointer;
     }
 
     /* 페이지네이션 스타일 */
@@ -61,17 +74,29 @@
       background: #aaa;
       cursor: not-allowed;
     }
-    .pagination span {
-      font-size: 16px;
-    }
   </style>
 </head>
 <body>
 
   <h1>🍅 클리셰토마토 – 영화 클리셰 점수</h1>
 
+  <!-- 검색 타입 + 정렬 버튼 -->
+  <div id="controls">
+    <div>
+      <label><input type="radio" name="search_type" value="title" checked> 제목 검색</label>
+      <label style="margin-left:20px;">
+        <input type="radio" name="search_type" value="keywords"> 키워드 검색
+      </label>
+    </div>
+
+    <div id="sort-buttons">
+      <button id="sort-desc">클리셰 높은 순 ▲</button>
+      <button id="sort-asc">클리셰 낮은 순 ▼</button>
+    </div>
+  </div>
+
   <!-- 검색창 -->
-  <input id="search" type="text" placeholder="제목 또는 키워드 검색..." />
+  <input id="search" type="text" placeholder="검색어 입력..." />
 
   <table>
     <thead>
@@ -85,7 +110,6 @@
     <tbody id="movie-table"></tbody>
   </table>
 
-  <!-- 페이지네이션 -->
   <div class="pagination">
     <button id="prev">이전</button>
     <span id="page-info">1 / 1</span>
@@ -115,9 +139,7 @@
       const table = document.getElementById("movie-table");
       table.innerHTML = "";
 
-      const pageData = getPagedData();
-
-      pageData.forEach((m, idx) => {
+      getPagedData().forEach((m, idx) => {
         table.innerHTML += `
           <tr>
             <td>${(currentPage - 1) * pageSize + idx + 1}</td>
@@ -131,82 +153,131 @@
 
     function updatePagination() {
       const totalPages = Math.ceil(filteredData.length / pageSize);
-      document.getElementById("page-info").innerText = `${currentPage} / ${totalPages}`;
-
+      document.getElementById("page-info").innerText =
+        `${currentPage} / ${totalPages}`;
       document.getElementById("prev").disabled = currentPage === 1;
-      document.getElementById("next").disabled = currentPage === totalPages || totalPages === 0;
+      document.getElementById("next").disabled =
+        currentPage === totalPages || totalPages === 0;
     }
 
+    // 🔍 검색 타입 분리
     document.getElementById("search").addEventListener("input", (e) => {
       const q = e.target.value.toLowerCase();
+      const type = document.querySelector("input[name='search_type']:checked").value;
 
-      filteredData = movieData.filter(m =>
-        m.title.toLowerCase().includes(q) ||
-        m.keywords.toLowerCase().includes(q)
-      );
+      if (type === "title") {
+        filteredData = movieData.filter(m =>
+          m.title.toLowerCase().includes(q)
+        );
+      } else {
+        filteredData = movieData.filter(m =>
+          m.keywords.toLowerCase().includes(q)
+        );
+      }
 
       currentPage = 1;
       renderTable();
       updatePagination();
     });
 
-    document.getElementById("prev").addEventListener("click", () => {
+    // 낮은 점수 순 / 높은 점수 순
+    document.getElementById("sort-asc").onclick = () => {
+      filteredData.sort((a, b) => a.cliche_score - b.cliche_score);
+      currentPage = 1;
+      renderTable();
+      updatePagination();
+    };
+
+    document.getElementById("sort-desc").onclick = () => {
+      filteredData.sort((a, b) => b.cliche_score - a.cliche_score);
+      currentPage = 1;
+      renderTable();
+      updatePagination();
+    };
+
+    document.getElementById("prev").onclick = () => {
       currentPage--;
       renderTable();
       updatePagination();
-    });
-
-    document.getElementById("next").addEventListener("click", () => {
+    };
+    document.getElementById("next").onclick = () => {
       currentPage++;
       renderTable();
       updatePagination();
-    });
+    };
 
     loadMovie();
   </script>
 
+  <!-- 추천 기능 -->
   <h2>🔍 영화 추천</h2>
   <input id="recommend-input" type="text" placeholder="영화 제목 입력 후 Enter" />
+  
+  <h3>📘 줄거리</h3>
+  <p id="desc-box">검색 후 줄거리가 여기에 표시됩니다.</p>
+  
+  <img id="poster-img" style="width:180px; margin-top:10px; border-radius:8px; display:none;">
+  
   <table>
     <thead>
       <tr>
         <th>순위</th>
         <th>추천 영화 제목</th>
+        <th>키워드</th>
         <th>유사도</th>
       </tr>
     </thead>
     <tbody id="recommend-table"></tbody>
   </table>
+  
 
   <script>
     const recommendInput = document.getElementById("recommend-input");
     const recommendTable = document.getElementById("recommend-table");
+    const descBox = document.getElementById("desc-box");
+    const posterImg = document.getElementById("poster-img");
 
     recommendInput.addEventListener("keydown", async (e) => {
-      if (e.key === "Enter") {
-        const title = recommendInput.value.trim();
-        if (!title) return;
+      if (e.key !== "Enter") return;
 
-        const res = await fetch(`http://127.0.0.1:8000/movie_recommend?title=${encodeURIComponent(title)}`);
-        const data = await res.json();
+      const title = recommendInput.value.trim();
+      if (!title) return;
 
-        recommendTable.innerHTML = "";
-        if (data.error) {
-          recommendTable.innerHTML = `<tr><td colspan="3">${data.error}</td></tr>`;
-          return;
-        }
+      const res = await fetch(
+        `http://127.0.0.1:8000/movie_recommend?title=${encodeURIComponent(title)}`
+      );
+      const data = await res.json();
 
-        data.forEach((d, idx) => {
-          recommendTable.innerHTML += `
-            <tr>
-              <td>${idx + 1}</td>
-              <td>${d.title}</td>
-              <td>${d.similarity.toFixed(3)}</td>
-            </tr>
-          `;
-        });
+      // 줄거리
+      descBox.innerText = data.description || "줄거리를 찾을 수 없습니다.";
+
+      // 포스터 표시
+      if (data.poster) {
+        posterImg.src = data.poster;
+        posterImg.style.display = "block";
+      } else {
+        posterImg.style.display = "none";
       }
+
+      // 추천 결과 출력
+      recommendTable.innerHTML = "";
+      if (!data.recommendations) {
+        recommendTable.innerHTML = `<tr><td colspan="4">추천 결과 없음</td></tr>`;
+        return;
+      }
+
+      data.recommendations.forEach((d, idx) => {
+        recommendTable.innerHTML += `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${d.title}</td>
+            <td>${d.keywords}</td>
+            <td>${d.similarity.toFixed(3)}</td>
+          </tr>
+        `;
+      });
     });
+
   </script>
 
 </body>

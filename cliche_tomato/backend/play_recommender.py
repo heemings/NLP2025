@@ -1,14 +1,18 @@
-# build_recommendations.py
+# play_recommender.py
 import os
+import sys
 import numpy as np
 import pandas as pd
+
 from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import StandardScaler
 
 
-CSV_PATH = "play_clean.csv"      # 원본 데이터
-OUTPUT_CSV = "recommendations_top10.csv"
+CSV_PATH = "play_cliche.csv"
 MODEL_NAME = "jhgan/ko-sbert-multitask"
+
+# 숫자 특징 (희곡용)
+NUMERIC_COLS = ["장수", "repetition_ratio", "기본점수", "cliche_score"]
 
 
 def cosine(a, b):
@@ -16,81 +20,133 @@ def cosine(a, b):
     return float(np.dot(a, b) / denom) if denom != 0 else 0.0
 
 
-def main():
-    print("[1] CSV 로드 중...")
-    df = pd.read_csv(CSV_PATH, encoding="utf-8-sig")
+class PlayRecommender:
+    def __init__(self, csv_path: str, model_name: str = MODEL_NAME):
+        self.csv_path = csv_path
+        self.model_name = model_name
 
-    required = ["제목", "장수", "repetition_ratio", "기본점수",
-                "최종점수", "장르클러스터", "나온모든키워드"]
-    for c in required:
-        if c not in df.columns:
-            raise ValueError(f"필수 컬럼 없음: {c}")
+        self.df = None
+        self.model = None
+        self.scaler = None
+        self.embeddings = None
 
-    # 숫자형 컬럼 전처리
-    numeric_cols = ["장수", "repetition_ratio", "기본점수", "최종점수"]
-    df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors="coerce").fillna(0)
+    def load_data(self):
+        if not os.path.exists(self.csv_path):
+            raise FileNotFoundError(f"CSV 파일 없음: {self.csv_path}")
 
-    # 빈값 전처리
-    df["제목"] = df["제목"].fillna("").astype(str)
-    df["나온모든키워드"] = df["나온모든키워드"].fillna("").astype(str)
+        self.df = pd.read_csv(self.csv_path, encoding="utf-8-sig")
 
-    print("[2] SBERT 모델 로드...")
-    model = SentenceTransformer(MODEL_NAME)
+        # drama_recommender 구조 그대로: 필수 컬럼 검사
+        required_cols = [
+            "제목", "장르클러스터", "나온모든키워드"
+        ] + NUMERIC_COLS
 
-    print("[3] 문장 임베딩 생성...")
-    texts = []
-    for _, row in df.iterrows():
-        txt = (
-            f"제목: {row['제목']} "
-            f"장르클러스터: {row['장르클러스터']} "
-            f"키워드: {row['나온모든키워드']}"
-        )
-        texts.append(txt)
+        for col in required_cols:
+            if col not in self.df.columns:
+                raise ValueError(f"필수 컬럼 없음: {col}")
 
-    text_emb = model.encode(texts, show_progress_bar=True)
+        # 문자열 컬럼 전처리
+        self.df["제목"] = self.df["제목"].fillna("").astype(str)
+        self.df["장르클러스터"] = self.df["장르클러스터"].fillna("").astype(str)
+        self.df["나온모든키워드"] = self.df["나온모든키워드"].fillna("").astype(str)
 
-    print("[4] 숫자 feature 스케일링...")
-    scaler = StandardScaler()
-    numeric_scaled = scaler.fit_transform(df[numeric_cols])
+        # 숫자형 전처리
+        for col in NUMERIC_COLS:
+            self.df[col] = pd.to_numeric(self.df[col], errors="coerce").fillna(0.0)
 
-    print("[5] 텍스트 + 숫자 feature 결합...")
-    embeddings = np.concatenate([text_emb, numeric_scaled], axis=1)
-    print("임베딩 shape =", embeddings.shape)
+    def build_model(self):
+        print(f"[INFO] SBERT 로딩 중... ({self.model_name})")
+        self.model = SentenceTransformer(self.model_name)
 
-    print("[6] 각 작품별 유사도 계산 및 상위 10개 선정...")
+        numeric_mat = self.df[NUMERIC_COLS].values
+        self.scaler = StandardScaler()
+        self.scaler.fit(numeric_mat)
 
-    results = []
-    n = len(df)
+    def build_embeddings(self):
+        print("[INFO] 희곡 텍스트 임베딩 생성 중...")
 
-    for i in range(n):
-        title_i = df.iloc[i]["제목"]
-        emb_i = embeddings[i]
+        texts = []
+        for _, row in self.df.iterrows():
+            t = (
+                f"제목: {row['제목']} "
+                f"/ 장르클러스터: {row['장르클러스터']} "
+                f"/ 키워드: {row['나온모든키워드']}"
+            )
+            texts.append(t)
+
+        text_emb = self.model.encode(texts, show_progress_bar=True)
+        numeric_scaled = self.scaler.transform(self.df[NUMERIC_COLS].values)
+
+        self.embeddings = np.concatenate([text_emb, numeric_scaled], axis=1)
+        print("[INFO] 최종 임베딩 shape =", self.embeddings.shape)
+
+    def fit(self):
+        print("[STEP] CSV 로드")
+        self.load_data()
+        print("[STEP] 모델 준비")
+        self.build_model()
+        print("[STEP] 임베딩 구성")
+        self.build_embeddings()
+        print("[DONE] 희곡 추천 모델 준비 완료!")
+
+    def recommend_by_title(self, title: str, top_k: int = 10):
+        if self.embeddings is None:
+            raise RuntimeError("fit()을 먼저 실행하세요.")
+
+        idx_list = self.df.index[self.df["제목"] == title].tolist()
+        if not idx_list:
+            print(f"[WARN] 제목 '{title}' 의 희곡이 없음.")
+            candidates = self.df[self.df["제목"].str.contains(title)]
+            if not candidates.empty:
+                print("[INFO] 비슷한 제목 검색:")
+                for t in candidates["제목"].head(10):
+                    print("  -", t)
+            return None
+
+        q_idx = idx_list[0]
+        q_emb = self.embeddings[q_idx]
 
         sims = []
-        for j in range(n):
-            if i == j:
+        for i in range(len(self.embeddings)):
+            if i == q_idx:
                 continue
-            sim = cosine(emb_i, embeddings[j])
-            sims.append((j, sim))
+            sim = cosine(q_emb, self.embeddings[i])
+            sims.append((i, sim))
 
-        # 유사도 높은 순 정렬
         sims.sort(key=lambda x: x[1], reverse=True)
 
-        top10 = sims[:10]
+        top_idx = [i for i, _ in sims[:top_k]]
+        top_sim = [s for _, s in sims[:top_k]]
 
-        for j, sim in top10:
-            results.append({
-                "기준작품": title_i,
-                "유사작품": df.iloc[j]["제목"],
-                "유사도": sim
-            })
+        res = self.df.iloc[top_idx].copy()
+        res["similarity"] = top_sim
 
-    print("[7] CSV 저장:", OUTPUT_CSV)
-    out_df = pd.DataFrame(results)
-    out_df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
+        # 드라마 버전과 동일: title + similarity만 출력
+        return res[["제목", "similarity"]]
 
-    print("\n=== 완료! ===")
-    print("recommendations_top10.csv 파일이 생성되었습니다.")
+
+def main():
+    csv_path = CSV_PATH
+    if len(sys.argv) > 1:
+        csv_path = sys.argv[1]
+
+    print(f"[INFO] 사용 CSV 파일: {csv_path}")
+
+    R = PlayRecommender(csv_path)
+    R.fit()
+
+    while True:
+        query = input("\n검색할 희곡 제목 (종료: q): ").strip()
+        if query.lower() == "q":
+            print("종료합니다.")
+            break
+
+        res = R.recommend_by_title(query, top_k=10)
+        if res is None:
+            continue
+
+        print(f"\n▶ '{query}' 와 유사한 희곡 TOP 10")
+        print(res.to_string(index=False))
 
 
 if __name__ == "__main__":
